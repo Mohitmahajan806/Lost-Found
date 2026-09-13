@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Vision Robot</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="background"></div>
+
+<div class="container">
+
+    <!-- Header -->
+
+    <header>
+
+        <h1>🤖 AI Vision Robot</h1>
+
+        <p>
+            Automatic Object Detection & Intelligent Image Description
+        </p>
+
+    </header>
+
+
+
+    <!-- Status -->
+
+    <div class="statusCard">
+
+        <div class="statusCircle" id="statusCircle"></div>
+
+        <span id="statusText">
+            Waiting for Ultrasonic Sensor...
+        </span>
+
+    </div>
+
+
+
+    <!-- Camera Section -->
+
+    <div class="cameraContainer">
+
+        <!-- Live Camera -->
+
+        <div class="card">
+
+            <h2>🎥 Live Camera</h2>
+
+            <video
+                id="video"
+                autoplay
+                playsinline
+                muted>
+            </video>
+
+        </div>
+
+
+
+        <!-- Captured Image -->
+
+        <div class="card">
+
+            <h2>📸 Captured Image</h2>
+
+            <img
+                id="capturedImage"
+                src=""
+                alt="Captured Image">
+
+        </div>
+
+    </div>
+
+
+
+    <!-- Hidden Canvas -->
+
+    <canvas id="canvas"></canvas>
+
+
+
+
+    <!-- Buttons -->
+
+    <div class="buttonContainer">
+
+        <button id="startCameraBtn">
+
+            🎥 Start Camera
+
+        </button>
+
+
+
+        <button id="connectBtn">
+
+            🔌 Connect Arduino
+
+        </button>
+
+
+
+        <button id="captureBtn">
+
+            📸 Capture
+
+        </button>
+
+
+
+        <button id="describeBtn">
+
+            🤖 Describe Image
+
+        </button>
+
+    </div>
+
+
+
+
+    <!-- AI Description -->
+
+    <div class="descriptionCard">
+
+        <h2>🧠 AI Image Description</h2>
+
+        <div id="description">
+
+            No image analyzed yet.
+
+        </div>
+
+    </div>
+
+
+
+
+    <!-- Detection History -->
+
+    <div class="historyCard">
+
+        <h2>📋 Detection History</h2>
+
+        <ul id="historyList">
+
+            <li>No detection yet.</li>
+
+        </ul>
+
+    </div>
+
+
+
+
+    <!-- Loading -->
+
+    <div id="loading">
+
+        <div class="loader"></div>
+
+        <p>
+
+            AI is analyzing the captured image...
+
+        </p>
+
+    </div>
+
+
+
+
+    <!-- Footer -->
+
+    <footer>
+
+        AI Vision Robot |
+        External Webcam |
+        Arduino |
+        Ultrasonic Sensor |
+        AI Image Captioning
+
+    </footer>
+
+</div>
+
+
+
+<script src="script.js"></script>
+
+</body>
+
+</html>

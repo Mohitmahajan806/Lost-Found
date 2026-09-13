@@ -1,0 +1,19 @@
+{
+  "name": "ai-vision-robot",
+  "version": "1.0.0",
+  "description": "AI Vision Robot",
+  "main": "server.js",
+  "scripts": {
+    "start": "npm run start:all",
+    "start:server": "node server.js",
+    "start:ai": "source .venv/bin/activate && python ai_server.py",
+    "start:web": "python3 -m http.server 8000",
+    "start:all": "(npm run start:server > /tmp/ai_robot_server.log 2>&1 &) && (source .venv/bin/activate && python ai_server.py > /tmp/ai_robot_ai.log 2>&1 &) && python3 -m http.server 8000"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "openai": "^5.23.2"
+  }
+}
