@@ -138,10 +138,10 @@ console.log("----------------------");
 
 // ================================
 // CHANGE THIS NUMBER IF REQUIRED
+// Use the primary (first) camera by default (cameras[0])
 // ================================
 
-
-let selectedCamera = cameras[1];
+let selectedCamera = cameras[0];
 
 
 
@@ -373,6 +373,8 @@ try{
 
 
 const analyzeEndpoints = [
+    // Primary local Python AI server (ai_server.py defaults to port 5001)
+    "http://localhost:5001/analyze",
     "http://localhost:3000/analyze",
     "http://localhost:3001/analyze",
     "http://localhost:3002/analyze",
@@ -412,7 +414,6 @@ for (const endpoint of analyzeEndpoints) {
 if (!result) {
     throw lastError || new Error("AI server unavailable");
 }
-
 
 
 loading.style.display="none";

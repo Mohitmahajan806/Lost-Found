@@ -254,15 +254,17 @@ app.post("/analyze", async (req, res) => {
                                 {
                                     type: "input_text",
 
-                                    text:
-                                        "You are the vision system of an AI robot. " +
-                                        "Analyze the camera image accurately. " +
-                                        "Describe visible people, objects, colors, " +
-                                        "actions, obstacles, surroundings, signs, " +
-                                        "and anything important for navigation. " +
-                                        "If there is no person, clearly describe " +
-                                        "the environment. Do not invent anything " +
-                                        "that is not visible."
+                                        text:
+                                            "You are an objective image analyzer. Only describe what is visible in the image. " +
+                                            "Do not invent facts or imply unseen context. Provide two outputs in valid JSON only: \n" +
+                                            "1) `caption_short`: one-sentence summary (8-15 words).\n" +
+                                            "2) `caption_long`: a 2-3 sentence detailed description.\n" +
+                                            "3) `tags`: list of lowercase keywords.\n" +
+                                            "4) `objects`: list of {type,count,confidence}.\n" +
+                                            "5) `entities`: list of {type,name,count,confidence}.\n" +
+                                            "6) `colors`: dominant colors list.\n" +
+                                            "7) `actions`: verbs if visible.\n+                                        "8) `location_clues`: e.g., 'indoor','street','kitchen', or visible sign text.\n" +
+                                            "9) `dimensions`: {width,height} if you can infer.\n+                                        "10) `safety_notes`: hazards if visible.\n+                                        "11) `confidence`: 0-1 overall.\n+                                        "12) `notes`: brief uncertainty notes.\n+                                        "Return ONLY a single JSON object matching this schema; do not add any extra text."
                                 },
 
                                 {
@@ -274,15 +276,33 @@ app.post("/analyze", async (req, res) => {
                     ]
                 });
 
-            const description =
-                response.output_text?.trim() ||
-                "No description was returned.";
+                const rawOutput = response.output_text?.trim() || "";
 
-            return res.json({
-                success: true,
-                mode: "openai",
-                description
-            });
+                let parsed = null;
+                let finalDescription = rawOutput;
+
+                try {
+                    parsed = JSON.parse(rawOutput);
+
+                    // Prefer caption_long, fallback to caption_short
+                    finalDescription = parsed.caption_long || parsed.caption_short || rawOutput;
+                } catch (e) {
+                    // Could not parse JSON — keep raw text as description
+                    parsed = null;
+                    finalDescription = rawOutput || "No description was returned.";
+                }
+
+                const resultPayload = {
+                    success: true,
+                    mode: "openai",
+                    description: finalDescription
+                };
+
+                if (parsed) {
+                    resultPayload.structured = parsed;
+                }
+
+                return res.json(resultPayload);
         }
 
         // =================================
@@ -327,27 +347,40 @@ app.post("/analyze", async (req, res) => {
                 const errorText =
                     await localResponse.text();
 
-                throw new Error(
+                console.warn(
                     `Local AI returned HTTP ${localResponse.status}: ${errorText}`
                 );
+
+                // Fall through to mock response below
+            } else {
+                const localData =
+                    await localResponse.json();
+
+                return res.json({
+                    success: true,
+
+                    mode: "local-model",
+
+                    description:
+                        localData.description ||
+                        "The local AI did not return a description."
+                });
             }
-
-            const localData =
-                await localResponse.json();
-
-            return res.json({
-                success: true,
-
-                mode: "local-model",
-
-                description:
-                    localData.description ||
-                    "The local AI did not return a description."
-            });
         } catch (error) {
             clearTimeout(timeout);
 
-            throw error;
+            console.warn(
+                "Local AI fetch failed:",
+                error && error.message
+            );
+
+            // Instead of failing, return a lightweight mock description
+            return res.json({
+                success: true,
+                mode: "mock",
+                description:
+                    "AI server unavailable — returning mock description: image received."
+            });
         }
     } catch (error) {
         console.error("");
