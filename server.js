@@ -8,6 +8,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const net = require("net");
+const path = require("path");
+const { spawn } = require("child_process");
 const OpenAI = require("openai");
 
 const app = express();
@@ -29,15 +31,10 @@ const DEFAULT_PORTS = [
     3009
 ];
 
-const DEFAULT_AI_PORTS = [
-    5001,
-    5002,
-    5003,
-    5004,
-    5005,
-    5006,
-    5007
-];
+const DEFAULT_AI_PORTS = Array.from(
+    { length: 20 },
+    (_, index) => 5001 + index
+);
 
 const REQUEST_LIMIT = "50mb";
 
@@ -48,13 +45,31 @@ const REQUEST_LIMIT = "50mb";
 const ENV_PORT = Number(process.env.PORT);
 const ENV_AI_PORT = Number(process.env.AI_PORT);
 
-const AI_PORT =
-    Number.isInteger(ENV_AI_PORT) && ENV_AI_PORT > 0
-        ? ENV_AI_PORT
-        : DEFAULT_AI_PORTS[0];
+const AI_PORT_CANDIDATES = (() => {
+    const preferred =
+        Number.isInteger(ENV_AI_PORT) && ENV_AI_PORT > 0
+            ? [ENV_AI_PORT]
+            : [];
 
-const LOCAL_AI_URL =
-    `http://127.0.0.1:${AI_PORT}/analyze`;
+    const fallback = DEFAULT_AI_PORTS.filter(
+        (port) => !preferred.includes(port)
+    );
+
+    return [...preferred, ...fallback];
+})();
+
+const LOCAL_AI_URLS =
+    AI_PORT_CANDIDATES.map(
+        (port) => `http://127.0.0.1:${port}/analyze`
+    );
+
+const LOCAL_AI_HEALTH_URLS =
+    AI_PORT_CANDIDATES.map(
+        (port) => `http://127.0.0.1:${port}/health`
+    );
+
+const LOCAL_AI_URL = LOCAL_AI_URLS[0] || "http://127.0.0.1:5002/analyze";
+const LOCAL_AI_HEALTH_TIMEOUT_MS = 1000;
 
 // =====================================
 // Check whether a port is available
@@ -132,42 +147,88 @@ app.use(
     })
 );
 
+// Initialize database and routes for captures
+const dbService = require('./services/db');
+const db = dbService.init();
+
+// Ensure captures directory exists
+const fs = require('fs');
+const capturesDir = path.join(__dirname, 'captures');
+if (!fs.existsSync(capturesDir)) fs.mkdirSync(capturesDir, { recursive: true });
+
+// Mount captures routes
+try {
+    require('./routes/captures')(app, db);
+} catch (e) {
+    console.error('Failed to mount captures routes', e);
+}
+
+app.get("/script.js", (req, res) => {
+    res.sendFile(path.join(__dirname, "script.js"));
+});
+
+app.get("/style.css", (req, res) => {
+    res.sendFile(path.join(__dirname, "style.css"));
+});
+
+async function isLocalAiAvailable() {
+    const healthChecks = await Promise.all(
+        LOCAL_AI_HEALTH_URLS.map(async (url) => {
+            const controller = new AbortController();
+            const timeout = setTimeout(
+                () => controller.abort(),
+                LOCAL_AI_HEALTH_TIMEOUT_MS
+            );
+
+            try {
+                const response = await fetch(url, {
+                    signal: controller.signal
+                });
+                return response.ok;
+            } catch {
+                return false;
+            } finally {
+                clearTimeout(timeout);
+            }
+        })
+    );
+
+    return healthChecks.some(Boolean);
+}
+
 // =====================================
 // Root endpoint
 // =====================================
 
 app.get("/", (req, res) => {
-    res.json({
-        name: "AI Vision Robot Backend",
-        status: "running",
-
-        endpoints: {
-            health: "GET /health",
-            analyze: "POST /analyze"
-        }
-    });
+    res.sendFile(path.join(__dirname, "index.html"));
 });
 
 // =====================================
 // Health endpoint
 // =====================================
 
-app.get("/health", (req, res) => {
+app.get("/health", async (req, res) => {
+    const openaiConfigured = hasValidOpenAIKey();
+    const localAiAvailable = openaiConfigured
+        ? false
+        : await isLocalAiAvailable();
+
     res.json({
         status: "ok",
 
-        mode: hasValidOpenAIKey()
+        mode: openaiConfigured
             ? "openai"
             : "local-model",
 
-        openaiConfigured:
-            hasValidOpenAIKey(),
+        openaiConfigured,
+
+        aiAvailable: openaiConfigured || localAiAvailable,
 
         serverPort:
             req.app.get("port"),
 
-        localAI:
-            LOCAL_AI_URL
+        localAI: LOCAL_AI_URLS
     });
 });
 
@@ -198,6 +259,54 @@ function isValidImage(image) {
 
     return false;
 }
+
+let localAiProcess = null;
+
+function startLocalAiServer() {
+    if (hasValidOpenAIKey()) {
+        return;
+    }
+
+    const pythonExecutable =
+        process.env.PYTHON_EXECUTABLE ||
+        path.join(__dirname, ".venv", "bin", "python");
+
+    if (!fs.existsSync(pythonExecutable)) {
+        console.error(
+            `Local AI server was not started: ${pythonExecutable} was not found. Run "npm run setup:ai" first.`
+        );
+        return;
+    }
+
+    localAiProcess = spawn(
+        pythonExecutable,
+        [path.join(__dirname, "ai_server.py")],
+        {
+            cwd: __dirname,
+            env: process.env,
+            stdio: "inherit"
+        }
+    );
+
+    localAiProcess.once("error", (error) => {
+        console.error("Failed to start the local AI server:", error);
+    });
+
+    localAiProcess.once("exit", (code, signal) => {
+        if (code !== 0 && code !== null) {
+            console.error(`Local AI server exited with code ${code}.`);
+        } else if (signal) {
+            console.error(`Local AI server exited after signal ${signal}.`);
+        }
+        localAiProcess = null;
+    });
+}
+
+process.once("exit", () => {
+    if (localAiProcess && !localAiProcess.killed) {
+        localAiProcess.kill();
+    }
+});
 
 // =====================================
 // AI IMAGE ANALYSIS
@@ -253,18 +362,7 @@ app.post("/analyze", async (req, res) => {
                             content: [
                                 {
                                     type: "input_text",
-
-                                        text:
-                                            "You are an objective image analyzer. Only describe what is visible in the image. " +
-                                            "Do not invent facts or imply unseen context. Provide two outputs in valid JSON only: \n" +
-                                            "1) `caption_short`: one-sentence summary (8-15 words).\n" +
-                                            "2) `caption_long`: a 2-3 sentence detailed description.\n" +
-                                            "3) `tags`: list of lowercase keywords.\n" +
-                                            "4) `objects`: list of {type,count,confidence}.\n" +
-                                            "5) `entities`: list of {type,name,count,confidence}.\n" +
-                                            "6) `colors`: dominant colors list.\n" +
-                                            "7) `actions`: verbs if visible.\n+                                        "8) `location_clues`: e.g., 'indoor','street','kitchen', or visible sign text.\n" +
-                                            "9) `dimensions`: {width,height} if you can infer.\n+                                        "10) `safety_notes`: hazards if visible.\n+                                        "11) `confidence`: 0-1 overall.\n+                                        "12) `notes`: brief uncertainty notes.\n+                                        "Return ONLY a single JSON object matching this schema; do not add any extra text."
+                                    text: `You are an objective image analyzer. Only describe what is visible in the image. Do not invent facts or imply unseen context. Return ONLY a single valid JSON object with the following fields: "image_title", "caption_short", "caption_long", "description", "tags", "objects", "entities", "colors", "actions", "location_clues", "text_detected", "safety_notes", "dimensions", "confidence", "notes".\n\nRequirements:\n- "image_title": 5-12 words descriptive title of the main subject.\n- "caption_short": one concise sentence (8-15 words).\n- "caption_long": 2-4 factual sentences.\n- "description": professional comprehensive visual description.\n- "tags": array of lowercase keywords.\n- "objects": array of {type,count,confidence}.\n- "entities": array of {type,name,count,confidence} or empty.\n- "colors": array of dominant colors.\n- "actions": array of visible verbs.\n- "location_clues": array like 'indoor','street','kitchen', or readable sign text.\n- "text_detected": array of strings with readable text; empty if none.\n- "safety_notes": visible hazards only.\n- "dimensions": {"width": NUMBER, "height": NUMBER} if you can infer; otherwise use nulls.\n- "confidence": number between 0 and 1.\n- "notes": short uncertainty notes or empty string.\n\nOnly include information that is clearly visible. Use "unknown" where identification is not possible. Do not include any explanatory text or markdown; output pure JSON.`
                                 },
 
                                 {
@@ -310,52 +408,56 @@ app.post("/analyze", async (req, res) => {
         // =================================
 
         console.log(
-            `Using local AI: ${LOCAL_AI_URL}`
+            `Using local AI endpoints: ${LOCAL_AI_URLS.join(", ")}`
         );
 
-        const controller =
-            new AbortController();
+        let localData = null;
+        let localError = null;
 
-        const timeout = setTimeout(() => {
-            controller.abort();
-        }, 30000);
+        for (const localAiUrl of LOCAL_AI_URLS) {
+            const controller =
+                new AbortController();
 
-        try {
-            const localResponse =
-                await fetch(
-                    LOCAL_AI_URL,
-                    {
-                        method: "POST",
+            const timeout = setTimeout(() => {
+                controller.abort();
+            }, 30000);
 
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
+            try {
+                const localResponse =
+                    await fetch(
+                        localAiUrl,
+                        {
+                            method: "POST",
 
-                        body: JSON.stringify({
-                            image
-                        }),
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
 
-                        signal:
-                            controller.signal
-                    }
-                );
+                            body: JSON.stringify({
+                                image
+                            }),
 
-            clearTimeout(timeout);
+                            signal:
+                                controller.signal
+                        }
+                    );
 
-            if (!localResponse.ok) {
-                const errorText =
-                    await localResponse.text();
+                clearTimeout(timeout);
 
-                console.warn(
-                    `Local AI returned HTTP ${localResponse.status}: ${errorText}`
-                );
+                if (!localResponse.ok) {
+                    const errorText =
+                        await localResponse.text();
 
-                // Fall through to mock response below
-            } else {
-                const localData =
-                    await localResponse.json();
+                    console.warn(
+                        `Local AI at ${localAiUrl} returned HTTP ${localResponse.status}: ${errorText}`
+                    );
 
+                    localError = new Error(`HTTP ${localResponse.status}`);
+                    continue;
+                }
+
+                localData = await localResponse.json();
                 return res.json({
                     success: true,
 
@@ -365,23 +467,29 @@ app.post("/analyze", async (req, res) => {
                         localData.description ||
                         "The local AI did not return a description."
                 });
+            } catch (error) {
+                clearTimeout(timeout);
+
+                console.warn(
+                    `Local AI fetch failed for ${localAiUrl}:`,
+                    error && error.message
+                );
+
+                localError = error;
             }
-        } catch (error) {
-            clearTimeout(timeout);
-
-            console.warn(
-                "Local AI fetch failed:",
-                error && error.message
-            );
-
-            // Instead of failing, return a lightweight mock description
-            return res.json({
-                success: true,
-                mode: "mock",
-                description:
-                    "AI server unavailable — returning mock description: image received."
-            });
         }
+
+        console.warn(
+            "All local AI endpoints failed; returning mock description.",
+            localError && localError.message
+        );
+
+        return res.json({
+            success: true,
+            mode: "mock",
+            description:
+                "AI server unavailable — returning mock description: image received."
+        });
     } catch (error) {
         console.error("");
         console.error(
@@ -415,6 +523,8 @@ app.post("/analyze", async (req, res) => {
 // =====================================
 
 async function startServer() {
+    startLocalAiServer();
+
     let port = null;
 
     // ---------------------------------

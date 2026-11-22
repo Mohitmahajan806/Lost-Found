@@ -1,5 +1,7 @@
 flask
 flask-cors
+python-dotenv
 transformers
 Pillow
 torch
+waitress

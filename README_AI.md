@@ -1,24 +1,19 @@
 # AI Server Setup
 
-This project includes `ai_server.py`, a small Flask-based image captioning server using Hugging Face `transformers`.
+This project includes `ai_server.py`, a Flask-based image captioning app using Hugging Face `transformers`, served locally with Waitress. The Express app serves the web UI and starts the local AI service together.
 
-To prepare and run locally:
-
-1. Create and activate the virtual environment and install dependencies:
+To prepare the local AI environment once:
 
 ```bash
-./setup_ai.sh
+npm run setup:ai
 ```
 
-2. Start the AI server (the script uses port 5001 by default):
+Start the app:
 
 ```bash
-source .venv/bin/activate
-python ai_server.py
+npm start
 ```
 
-3. Open the web UI (`index.html`) and use the `Describe Image` button. The frontend calls `http://localhost:5001/analyze` first.
+Open the URL printed by the server (usually `http://localhost:3000`). The app's health check reports the AI as ready only when the configured OpenAI provider or local model service is available. The local model is downloaded on first run and requires internet access and disk space.
 
-Notes:
-- The `transformers` model will be downloaded on first run and requires internet and disk space.
-- If you prefer a different port, set `AI_PORT` env var before running, e.g. `AI_PORT=3000 python ai_server.py`.
+To run only the AI service for development, activate `.venv` and run `python ai_server.py`; it uses port 5001 by default. Set `AI_PORT` to use a different port.

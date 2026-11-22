@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
@@ -9,6 +10,8 @@ import base64
 import io
 import os
 import socket
+
+from waitress import serve
 
 
 def find_available_port(start_port, max_range=20):
@@ -22,6 +25,8 @@ def find_available_port(start_port, max_range=20):
                 continue
     return start_port
 
+
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -105,7 +110,9 @@ if __name__ == "__main__":
     port = int(os.environ.get("AI_PORT", "5001"))
     if port == 5001:
         port = find_available_port(port)
-    app.run(
+    serve(
+        app,
         host="0.0.0.0",
-        port=port
+        port=port,
+        threads=4
     )

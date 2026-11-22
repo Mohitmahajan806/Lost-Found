@@ -132,6 +132,25 @@
 
 
 
+    <!-- Captured Result -->
+
+    <div class="resultCard" id="resultCard">
+
+        <h2>🖼️ Captured Result</h2>
+
+        <div class="resultHeader">
+            <h3 id="resultTitle">Captured Image</h3>
+        </div>
+
+        <img id="resultImage" src="" alt="Captured result image">
+
+        <div id="resultMeta" class="resultMeta">
+            Capture an image to view the result here.
+        </div>
+
+    </div>
+
+
     <!-- AI Description -->
 
     <div class="descriptionCard">
@@ -142,6 +161,24 @@
 
             No image analyzed yet.
 
+        </div>
+
+    </div>
+
+
+    <!-- Gallery -->
+
+    <div class="card" id="galleryCard">
+
+        <h2>🖼️ Gallery & Search</h2>
+
+        <div style="margin-bottom:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; align-items:center;">
+            <input id="searchInput" placeholder="Search your captures..." style="width:70%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,.12);" />
+            <button id="deleteAllCapturesBtn" type="button" style="padding:10px 14px; border:none; border-radius:8px; background:#ff4d4d; color:white; cursor:pointer; font-weight:600;">Delete All</button>
+        </div>
+
+        <div id="galleryGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px;">
+            <!-- Thumbnails will be injected here -->
         </div>
 
     </div>
